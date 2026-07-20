@@ -32,13 +32,16 @@ RUN java -Djarmode=tools -jar target/*.jar extract --layers --destination extrac
 
 # ---------------------------------------------------------------------------
 # Runtime stage
+#
+# Runs on the platform team's hardened JRE base rather than a public image, so
+# the JRE build, CA bundle, and patch level are the same across all services.
+# Published to Artifact Registry by the platform team's pipeline.
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM us-central1-docker.pkg.dev/nexapay-platform/base-images/nexapay-jre-base:21.0.11 AS runtime
 WORKDIR /app
 
-# Alpine has no useradd; adduser -S creates a system account. Nothing is
-# installed here: the HEALTHCHECK below uses the wget that busybox already
-# provides, since Alpine ships no curl.
+# The platform base is Alpine-derived, so adduser -S creates the system account
+# and the HEALTHCHECK below uses busybox wget.
 RUN addgroup -S spring && adduser -S -u 10001 -G spring spring
 
 # Every layer is copied into the SAME directory on purpose. The extracted

@@ -13,6 +13,7 @@ target/
 # Docker's own files
 Dockerfile
 .dockerignore
+backup/
 
 # Docs and local noise
 README.md
