@@ -6,6 +6,22 @@ This project is a standalone Java Spring Boot API example for a banking domain.
 - All data is stored in memory (`ConcurrentHashMap` + in-memory lists).
 - Data resets every time the app restarts.
 
+## Seed Data
+
+On startup the API loads 10 customers, one account per customer, and 10
+transactions per account. Customer ids run `1001`–`1010` and account ids run
+`500001`–`500010`, so the examples below work against a freshly started app.
+
+The generator uses a fixed random seed, so every restart produces identical
+data. Balances are always consistent with the transaction history because the
+seeder goes through the same service the API uses.
+
+Set `nexapay.seed.enabled=false` to start with an empty store:
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.arguments=--nexapay.seed.enabled=false
+```
+
 ## Tech Stack
 
 - Java 21
