@@ -10,13 +10,18 @@ This project is a standalone Java Spring Boot API example for a banking domain.
 
 - Java 21
 - Spring Boot 3
-- Maven
+- Maven (via the included wrapper — no local Maven install needed)
 
 ## Run
 
 ```bash
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
+
+The wrapper downloads the correct Maven version on first run, so you only
+need a Java 21 JDK on your `PATH`. On Windows, use `mvnw.cmd spring-boot:run`.
+
+If you have Maven installed globally, plain `mvn spring-boot:run` also works.
 
 The API starts at:
 
