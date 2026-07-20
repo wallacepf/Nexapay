@@ -66,8 +66,8 @@ docker run --rm -p 8080:8080 \
 
 Notes on the image:
 
-- Multi-stage build: the JDK and Maven stay in the build stage, and only a JRE
-  ships in the final image.
+- Multi-stage build on Alpine: the JDK and Maven stay in the build stage, and
+  only a JRE ships in the final image (~336MB).
 - The fat jar is split into Spring Boot layers so dependencies cache
   separately from application code. Editing a source file rebuilds in seconds
   rather than re-resolving dependencies.

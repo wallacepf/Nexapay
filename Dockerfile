@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # Build stage
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /build
 
 # Copy only the build definition first. This layer stays cached until pom.xml
@@ -33,13 +33,13 @@ RUN java -Djarmode=tools -jar target/*.jar extract --layers --destination extrac
 # ---------------------------------------------------------------------------
 # Runtime stage
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre AS runtime
+FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 
-# The base image already provides curl, which HEALTHCHECK uses, so nothing is
-# installed here. UID 1000 is taken by the image's own "ubuntu" user, hence
-# 10001.
-RUN useradd --system --uid 10001 --create-home spring
+# Alpine has no useradd; adduser -S creates a system account. Nothing is
+# installed here: the HEALTHCHECK below uses the wget that busybox already
+# provides, since Alpine ships no curl.
+RUN addgroup -S spring && adduser -S -u 10001 -G spring spring
 
 # Every layer is copied into the SAME directory on purpose. The extracted
 # app.jar is a thin jar whose manifest Class-Path points at ./lib, so the
@@ -59,7 +59,7 @@ EXPOSE 8080
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8080/api/health || exit 1
+    CMD wget -q -O - http://localhost:8080/api/health || exit 1
 
 # exec form via sh so JAVA_OPTS expands, while exec keeps java as PID 1 so it
 # still receives SIGTERM for a clean shutdown.
