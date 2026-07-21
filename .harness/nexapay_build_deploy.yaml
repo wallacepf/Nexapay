@@ -1,0 +1,148 @@
+pipeline:
+  name: Nexapay Banking API - Build and Deploy
+  identifier: nexapay_banking_api_build_deploy
+  # orgIdentifier / projectIdentifier are structural in Harness (not runtime
+  # inputs). Change these to match the org and project you import into.
+  orgIdentifier: default
+  projectIdentifier: nexapay
+  properties:
+    ci:
+      codebase:
+        # Account/org-level code connector pointing at this repo.
+        connectorRef: <+input>
+        repoName: Nexapay
+        # Branch or PR to build; supplied when the pipeline runs.
+        build: <+input>
+  variables:
+    - name: gcpProject
+      type: String
+      description: GCP project ID that hosts the GAR repo and the Cloud Run service.
+      required: true
+      value: <+input>
+    - name: garHost
+      type: String
+      description: Regional Artifact Registry host, e.g. us-central1-docker.pkg.dev.
+      required: true
+      value: us-central1-docker.pkg.dev
+    - name: garRepo
+      type: String
+      description: Artifact Registry repository name (the repo inside the project).
+      required: true
+      value: nexapay
+    - name: imageName
+      type: String
+      description: Image name within the GAR repo.
+      required: true
+      value: banking-api
+    - name: cloudRunRegion
+      type: String
+      required: true
+      value: us-central1
+    - name: cloudRunService
+      type: String
+      required: true
+      value: nexapay-banking-api
+    - name: dockerfile
+      type: String
+      # The root Dockerfile is intentionally broken (a workshop exercise), so the
+      # working build at backup/Dockerfile is the default. Point this at
+      # "Dockerfile" if you want the build stage to fail on purpose.
+      description: Path to the Dockerfile to build.
+      required: true
+      value: backup/Dockerfile
+  stages:
+    - stage:
+        name: Build
+        identifier: Build
+        type: CI
+        spec:
+          cloneCodebase: true
+          # Cloud Run runs amd64, so build amd64 here rather than the arm64 a
+          # developer laptop would produce.
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            # Harness-hosted build infrastructure; no delegate required.
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Unit Tests
+                  identifier: unit_tests
+                  spec:
+                    # The Dockerfile builds with -DskipTests for speed, so tests
+                    # run here instead and fail the pipeline if they break.
+                    image: maven:3.9.9-eclipse-temurin-21
+                    shell: Sh
+                    command: |
+                      ./mvnw -B test
+              - step:
+                  type: BuildAndPushGAR
+                  name: Build and Push Image
+                  identifier: build_push_gar
+                  spec:
+                    # GCP connector with push access to Artifact Registry.
+                    connectorRef: <+input>
+                    host: <+pipeline.variables.garHost>
+                    projectID: <+pipeline.variables.gcpProject>
+                    # Final ref: host/projectID/imageName == host/project/repo/image
+                    imageName: <+pipeline.variables.garRepo>/<+pipeline.variables.imageName>
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - latest
+                    dockerfile: <+pipeline.variables.dockerfile>
+                    context: .
+    - stage:
+        name: Deploy
+        identifier: Deploy
+        type: CI
+        spec:
+          # Delegate-free Cloud Run deploy via gcloud in a Run step. A native
+          # Harness CD "Deployment" stage is the alternative, but it needs a
+          # delegate plus Service/Environment/Infrastructure definitions.
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Deploy to Cloud Run
+                  identifier: deploy_cloud_run
+                  spec:
+                    image: google/cloud-sdk:slim
+                    shell: Sh
+                    envVariables:
+                      # Harness secret holding a GCP service account key JSON with
+                      # roles/run.admin and roles/iam.serviceAccountUser.
+                      GCP_SA_KEY: <+secrets.getValue("gcp_sa_key")>
+                    command: |
+                      set -euo pipefail
+                      echo "$GCP_SA_KEY" > /tmp/key.json
+                      trap 'rm -f /tmp/key.json' EXIT
+                      gcloud auth activate-service-account --key-file=/tmp/key.json
+                      gcloud config set project <+pipeline.variables.gcpProject>
+
+                      IMAGE="<+pipeline.variables.garHost>/<+pipeline.variables.gcpProject>/<+pipeline.variables.garRepo>/<+pipeline.variables.imageName>:<+pipeline.sequenceId>"
+                      echo "Deploying $IMAGE to Cloud Run service <+pipeline.variables.cloudRunService>"
+
+                      gcloud run deploy <+pipeline.variables.cloudRunService> \
+                        --image "$IMAGE" \
+                        --region <+pipeline.variables.cloudRunRegion> \
+                        --platform managed \
+                        --port 8080 \
+                        --allow-unauthenticated \
+                        --set-env-vars NEXAPAY_SEED_ENABLED=true
+
+                      URL=$(gcloud run services describe <+pipeline.variables.cloudRunService> \
+                        --region <+pipeline.variables.cloudRunRegion> \
+                        --format 'value(status.url)')
+                      echo "Service URL: $URL"
+                      echo "Health:      $URL/api/health"
