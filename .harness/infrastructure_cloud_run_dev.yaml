@@ -1,0 +1,15 @@
+infrastructureDefinition:
+  name: cloud_run_dev
+  identifier: cloud_run_dev
+  orgIdentifier: default
+  projectIdentifier: nexapay
+  environmentRef: dev
+  deploymentType: GoogleCloudRun
+  type: GoogleCloudRun
+  spec:
+    # GCP connector with Cloud Run deploy permissions
+    # (roles/run.admin + roles/iam.serviceAccountUser).
+    connectorRef: <+input>
+    project: <+input>
+    region: us-central1
+  allowSimultaneousDeployments: false

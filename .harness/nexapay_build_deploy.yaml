@@ -34,14 +34,9 @@ pipeline:
       description: Image name within the GAR repo.
       required: true
       value: banking-api
-    - name: cloudRunRegion
-      type: String
-      required: true
-      value: us-central1
-    - name: cloudRunService
-      type: String
-      required: true
-      value: nexapay-banking-api
+    # Cloud Run region and service name now live in the infrastructure and
+    # service-manifest entities (infrastructure_cloud_run_dev.yaml and
+    # manifests/cloud-run-service.yaml), not here.
     - name: dockerfile
       type: String
       # The root Dockerfile is intentionally broken (a workshop exercise), so the
@@ -98,51 +93,74 @@ pipeline:
     - stage:
         name: Deploy
         identifier: Deploy
-        type: CI
+        type: Deployment
         spec:
-          # Delegate-free Cloud Run deploy via gcloud in a Run step. A native
-          # Harness CD "Deployment" stage is the alternative, but it needs a
-          # delegate plus Service/Environment/Infrastructure definitions.
-          cloneCodebase: false
-          platform:
-            os: Linux
-            arch: Amd64
-          runtime:
-            type: Cloud
-            spec: {}
+          deploymentType: GoogleCloudRun
+          # References entities defined alongside this pipeline:
+          #   service_banking_api.yaml, environment_dev.yaml,
+          #   infrastructure_cloud_run_dev.yaml
+          service:
+            serviceRef: nexapay_banking_api
+            # Deploy the tag the Build stage just pushed, by feeding
+            # <+pipeline.sequenceId> as the artifact version.
+            serviceInputs:
+              serviceDefinition:
+                type: GoogleCloudRun
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: banking_api_gar
+                      sources:
+                        - identifier: banking_api_gar
+                          type: GoogleArtifactRegistry
+                          spec:
+                            version: <+pipeline.sequenceId>
+          environment:
+            environmentRef: dev
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: cloud_run_dev
           execution:
             steps:
               - step:
-                  type: Run
+                  name: Download Manifest
+                  identifier: download_manifest
+                  type: DownloadManifest
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  name: Prepare Rollback
+                  identifier: prepare_rollback
+                  type: GoogleCloudRunPrepareRollback
+                  timeout: 10m
+                  spec: {}
+              - step:
                   name: Deploy to Cloud Run
-                  identifier: deploy_cloud_run
+                  identifier: cloud_run_deploy
+                  # Runs `gcloud run services replace` with the resolved manifest.
+                  type: GoogleCloudRunDeploy
+                  timeout: 15m
+                  spec: {}
+              - step:
+                  name: Shift 100% Traffic
+                  identifier: traffic_shift
+                  # Runs `gcloud run services update-traffic`.
+                  type: GoogleCloudRunTrafficShift
+                  timeout: 10m
                   spec:
-                    image: google/cloud-sdk:slim
-                    shell: Sh
-                    envVariables:
-                      # Harness secret holding a GCP service account key JSON with
-                      # roles/run.admin and roles/iam.serviceAccountUser.
-                      GCP_SA_KEY: <+secrets.getValue("gcp_sa_key")>
-                    command: |
-                      set -euo pipefail
-                      echo "$GCP_SA_KEY" > /tmp/key.json
-                      trap 'rm -f /tmp/key.json' EXIT
-                      gcloud auth activate-service-account --key-file=/tmp/key.json
-                      gcloud config set project <+pipeline.variables.gcpProject>
-
-                      IMAGE="<+pipeline.variables.garHost>/<+pipeline.variables.gcpProject>/<+pipeline.variables.garRepo>/<+pipeline.variables.imageName>:<+pipeline.sequenceId>"
-                      echo "Deploying $IMAGE to Cloud Run service <+pipeline.variables.cloudRunService>"
-
-                      gcloud run deploy <+pipeline.variables.cloudRunService> \
-                        --image "$IMAGE" \
-                        --region <+pipeline.variables.cloudRunRegion> \
-                        --platform managed \
-                        --port 8080 \
-                        --allow-unauthenticated \
-                        --set-env-vars NEXAPAY_SEED_ENABLED=true
-
-                      URL=$(gcloud run services describe <+pipeline.variables.cloudRunService> \
-                        --region <+pipeline.variables.cloudRunRegion> \
-                        --format 'value(status.url)')
-                      echo "Service URL: $URL"
-                      echo "Health:      $URL/api/health"
+                    revisionTrafficDetails:
+                      - revisionName: latest
+                        trafficValue: 100
+            rollbackSteps:
+              - step:
+                  name: Rollback Cloud Run
+                  identifier: cloud_run_rollback
+                  type: GoogleCloudRunRollback
+                  timeout: 10m
+                  spec: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

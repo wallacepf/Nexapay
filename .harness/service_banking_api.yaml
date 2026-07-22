@@ -1,0 +1,41 @@
+service:
+  name: Nexapay Banking API
+  identifier: nexapay_banking_api
+  orgIdentifier: default
+  projectIdentifier: nexapay
+  serviceDefinition:
+    type: GoogleCloudRun
+    spec:
+      manifests:
+        - manifest:
+            identifier: cloud_run_service
+            # NOTE: verify this manifest type string on import. It follows the
+            # Cloud Functions analog (GoogleCloudFunctionDefinition); Harness may
+            # name the Cloud Run one slightly differently.
+            type: GoogleCloudRunService
+            spec:
+              store:
+                # Harness File Store. Upload manifests/cloud-run-service.yaml
+                # there, or switch store.type to Github/Git to read it from this
+                # repo using the code connector.
+                type: Harness
+                spec:
+                  files:
+                    - /cloud-run-service.yaml
+      artifacts:
+        primary:
+          primaryArtifactRef: banking_api_gar
+          sources:
+            - identifier: banking_api_gar
+              type: GoogleArtifactRegistry
+              spec:
+                connectorRef: <+input>
+                repositoryType: docker
+                project: <+input>
+                region: us-central1
+                repositoryName: nexapay
+                package: banking-api
+                # Version (image tag) is supplied by the pipeline as
+                # <+pipeline.sequenceId> so the deploy uses the image the Build
+                # stage just pushed.
+                version: <+input>
