@@ -1,0 +1,41 @@
+# Harness values.yaml for the K8s deploy stage.
+#
+# Harness renders every manifest in this folder as a Go template with these
+# values. `name`, `image`, and `dockerconfigjson` are the three keys Harness
+# treats specially:
+#   - name              seeds release/resource names.
+#   - image             is wired to the artifact selected on the stage, so the
+#                       tag comes from the pipeline (build stage or trigger),
+#                       not from a value hardcoded here.
+#   - dockerconfigjson  is pulled from the connector and mounted as the
+#                       imagePullSecret referenced in deployment.yaml.
+name: banking-api
+
+# <+artifact.image> resolves to the full repo:tag of the primary artifact on
+# the stage. Override on non-artifact stages by editing this line.
+image: <+artifact.image>
+dockerconfigjson: <+artifact.imagePullSecret>
+
+replicas: 2
+
+createNamespace: false
+# Defaults to the namespace on the stage's Infrastructure. Set explicitly to
+# pin it regardless of the environment.
+namespace: <+infra.namespace>
+
+# Rolled into a ConfigMap and exposed as env vars on the pod.
+config:
+  SPRING_PROFILES_ACTIVE: prod
+  NEXAPAY_SEED_ENABLED: "false"
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 768Mi
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
