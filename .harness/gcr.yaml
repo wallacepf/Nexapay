@@ -14,3 +14,10 @@ spec:
         - image: us-central1-docker.pkg.dev/prj-wallacefigueiredo-91659d/k8s-wallacefigueiredo/api:latest
           ports:
             - containerPort: 8080
+          startupProbe:
+           tcpSocket:
+             port: 8080
+           initialDelaySeconds: 5
+           timeoutSeconds: 5
+           failureThreshold: 10
+           periodSeconds: 5
