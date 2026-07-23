@@ -5,6 +5,8 @@ apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: nexapay-api
+  annotations:
+    run.googleapis.com/invoker-iam-disabled: 'true'
 spec:
   template:
     spec:
