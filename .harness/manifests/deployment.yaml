@@ -61,3 +61,9 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:                 # ← NOVO
+            - name: tmp                 # ← NOVO
+              mountPath: /tmp           # ← NOVO
+      volumes:                          # ← NOVO (mesmo nível de "containers")
+        - name: tmp                     # ← NOVO
+          emptyDir: {}     
