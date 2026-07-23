@@ -1,0 +1,14 @@
+# Following are the minimum set of parameters required to create a Google Cloud Run Service.
+# Please make sure your uploaded manifest file includes all of them.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: nexapay-api
+spec:
+  template:
+    spec:
+      containers:
+        - image: us-central1-docker.pkg.dev/prj-wallacefigueiredo-91659d/k8s-wallacefigueiredo/api:latest
+          ports:
+            - containerPort: 8080
